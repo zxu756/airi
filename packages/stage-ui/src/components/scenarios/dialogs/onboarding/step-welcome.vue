@@ -11,9 +11,7 @@ import { useI18n } from 'vue-i18n'
 import onboardingLogo from '../../../../assets/onboarding.avif'
 
 import { AIRI_FLUX_URL, AIRI_TERMS_URL } from '../../../../constants/public-links'
-import { useAuthStore } from '../../../../stores/auth'
 import { useAiriCardStore } from '../../../../stores/modules/airi-card'
-import { useOnboardingStore } from '../../../../stores/onboarding'
 import { useSettingsGeneral } from '../../../../stores/settings'
 
 interface Props {
@@ -23,8 +21,6 @@ interface Props {
 
 const props = defineProps<Props>()
 const { t } = useI18n()
-const authStore = useAuthStore()
-const onboardingStore = useOnboardingStore()
 const settingsStore = useSettingsGeneral()
 const { language } = storeToRefs(settingsStore)
 const cardStore = useAiriCardStore()
@@ -40,11 +36,6 @@ watch(() => cardStore.builtInCard.description, (description, previous) => {
   if (card && card.description === previous)
     void cardStore.updateCard('default', { ...card, description })
 })
-
-async function handleLogin() {
-  onboardingStore.showingSetup = false
-  await authStore.requestLogin()
-}
 
 function handleLocalSetup() {
   props.onNext()
@@ -125,19 +116,6 @@ function handleLocalSetup() {
       </p>
     </div>
     <div :class="['mx-2 flex flex-col items-stretch gap-2']">
-      <Button
-        v-motion="{
-          initial: { opacity: 0, y: 8 },
-          enter: { opacity: 1, y: 0 },
-          duration: 500,
-          delay: 200,
-        }"
-        color="primary"
-        variant="primary"
-        size="lg"
-        :label="t('settings.dialogs.onboarding.loginAction')"
-        @click="handleLogin"
-      />
       <Button
         v-if="props.customProviderSetupEnabled"
         v-motion="{

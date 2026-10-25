@@ -10,7 +10,6 @@ import { updateModelAssetStatus, useInferencePreload } from '@proj-airi/stage-ui
 import { usePiniaSynced } from '@proj-airi/stage-ui/libs/pinia'
 import { initializeAnalytics } from '@proj-airi/stage-ui/libs/product-signals'
 import { isSherpawModelBundled, setSherpawModelAssetHost } from '@proj-airi/stage-ui/libs/providers/providers/sherpaw/model-assets'
-import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
 import { useCharacterOrchestratorStore } from '@proj-airi/stage-ui/stores/character'
 import { useChatStore } from '@proj-airi/stage-ui/stores/chat'
 import { usePluginHostInspectorStore } from '@proj-airi/stage-ui/stores/devtools/plugin-host-debug'
@@ -23,7 +22,6 @@ import { useConsciousnessStore } from '@proj-airi/stage-ui/stores/modules/consci
 import { useHearingStore } from '@proj-airi/stage-ui/stores/modules/hearing'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { useVisionStore } from '@proj-airi/stage-ui/stores/modules/vision'
-import { useOnboardingStore } from '@proj-airi/stage-ui/stores/onboarding'
 import { usePerfTracerBridgeStore } from '@proj-airi/stage-ui/stores/perf-tracer-bridge'
 import { listProvidersForPluginHost, shouldPublishPluginHostCapabilities } from '@proj-airi/stage-ui/stores/plugin-host-capabilities'
 import { useSettings, useSettingsAudioDevice } from '@proj-airi/stage-ui/stores/settings'
@@ -64,7 +62,6 @@ import {
   electronPluginUnload,
 } from '../shared/eventa/plugin/host'
 import { electronPluginToolsChanged } from '../shared/eventa/plugin/tools'
-import { initializeElectronAuthCallbackBridge } from './bridges/electron-auth-callback'
 import { initializeIOTraceHubBridge } from './bridges/io-trace-hub'
 import { initializeStageThreeRuntimeTraceBridge } from './bridges/stage-three-runtime-trace'
 import { useLanguage } from './composables/use-language'
@@ -154,8 +151,6 @@ const stopLeadershipListener = syncedPinia.onLeadershipChange((isLeader) => {
 })
 
 function createFullStageRuntime() {
-  const authStore = useAuthStore()
-  const onboardingStore = useOnboardingStore()
   const contextBridgeStore = useContextBridgeStore()
   const displayModelsStore = useDisplayModelsStore()
   const serverChannelSettingsStore = useServerChannelSettingsStore()
@@ -172,27 +167,6 @@ function createFullStageRuntime() {
   useSpeechStore()
   useSettingsStageModel()
   useVisionStore()
-
-  let stopAuthenticatedSetup: (() => void) | undefined
-  let stopLoggedOutSetup: (() => void) | undefined
-
-  async function removeAuthenticationProviderConfiguration() {
-    if (!syncedPinia.isLeader())
-      return
-
-    await cardStore.configureForAuthentication(false)
-  }
-
-  function registerAuthenticatedSetup() {
-    stopAuthenticatedSetup ??= authStore.onAuthenticated(async () => {
-      if (!syncedPinia.isLeader())
-        return
-
-      await cardStore.configureForAuthentication(true)
-      await onboardingStore.closeAfterAuthentication()
-    })
-    stopLoggedOutSetup ??= authStore.onLogout(removeAuthenticationProviderConfiguration)
-  }
 
   const { activeProvider, artistryGlobals, activeModel, defaultPromptPrefix, providerOptions } = storeToRefs(artistryStore)
   const getServerChannelConfig = useElectronEventaInvoke(electronGetServerChannelConfig)
@@ -224,10 +198,6 @@ function createFullStageRuntime() {
 
   usePerfTracerBridgeStore()
   initializeStageThreeRuntimeTraceBridge()
-  // The main process returns the callback only to the renderer that started
-  // sign-in. Each login-capable window listens locally, while the synchronized
-  // auth action still executes once in the main Stage leader.
-  initializeElectronAuthCallbackBridge()
   void stageWindowLifecycleStore.initializeWindowLifecycleBridge()
 
   contextBridgeStore.setSparkNotifyHostRole(isWidgetsWindow ? 'client' : 'main')
@@ -298,12 +268,8 @@ function createFullStageRuntime() {
   return {
     async initialize() {
       initializeAnalytics()
-      await authStore.initialize()
       await displayModelsStore.initialize()
       await cardStore.initialize()
-      registerAuthenticatedSetup()
-      if (!authStore.isAuthenticated)
-        await removeAuthenticationProviderConfiguration()
 
       await displayModelsStore.loadDisplayModelsFromIndexedDB()
       await settingsStore.initializeStageModel()
