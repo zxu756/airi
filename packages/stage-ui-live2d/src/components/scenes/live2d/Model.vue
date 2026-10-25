@@ -597,6 +597,19 @@ function configureExpressions(internalModel?: PixiLive2DInternalModel) {
   }
 
   selectExpressionExecutor()
+  applyDefaultExpressionSettings()
+}
+
+function applyDefaultExpressionSettings() {
+  const key = `settings/live2d/default-expressions/${props.modelId ?? ''}`
+  try {
+    const value = JSON.parse(localStorage.getItem(key) ?? '[]')
+    if (Array.isArray(value))
+      live2d.expressions.setDefaults(value.filter((name): name is string => typeof name === 'string'))
+  }
+  catch (error) {
+    console.warn('[Live2D] Failed to read default expressions:', error)
+  }
 }
 
 /** The Root blends expressions when the expression system is on. Otherwise the SDK manager applies them. */

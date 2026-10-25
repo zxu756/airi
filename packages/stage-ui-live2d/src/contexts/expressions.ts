@@ -55,6 +55,8 @@ export interface Live2DExpressionsContext {
   resetExecution: () => Promise<boolean>
   /** Renders temporary previews over expression state without changing it. */
   setPreviewExpressions: (names: readonly string[]) => void
+  /** Applies these expressions as a base layer whenever expressions reset. */
+  setDefaults: (names: readonly string[]) => void
   /** Applies one registered expression. Returns false for an unknown name. */
   activate: (name: string) => boolean
   reset: () => void
@@ -80,6 +82,7 @@ export function createLive2DExpressionsContext(
   const activeLastFrame = new Set<string>()
   let previewExpressionNames: readonly string[] = []
   let previewParameters = new Map<string, Live2DExpressionParameterDefinition>()
+  let defaultExpressionNames: readonly string[] = []
   let executor: Live2DExpressionExecutor | undefined
   let executionResetTimer: ReturnType<typeof setTimeout> | undefined
   let executionGeneration = 0
@@ -98,6 +101,28 @@ export function createLive2DExpressionsContext(
 
     clearTimeout(executionResetTimer)
     executionResetTimer = undefined
+  }
+
+  function applyDefaultExpressions() {
+    for (const name of defaultExpressionNames) {
+      const definition = definitions.value.get(name)
+      if (!definition)
+        continue
+
+      for (const definitionParameter of definition.parameters) {
+        const parameter = parameters.value.get(definitionParameter.parameterId)
+        if (!parameter)
+          continue
+
+        parameter.activeBlend = definitionParameter.blend
+        parameter.currentValue = definitionParameter.value
+      }
+    }
+  }
+
+  function setDefaults(names: readonly string[]) {
+    defaultExpressionNames = [...names]
+    applyDefaultExpressions()
   }
 
   function rebuildParameters() {
@@ -127,6 +152,7 @@ export function createLive2DExpressionsContext(
     }
 
     parameters.value = nextParameters
+    applyDefaultExpressions()
   }
 
   function register(definition: Live2DExpressionDefinition) {
@@ -184,6 +210,7 @@ export function createLive2DExpressionsContext(
       parameter.activeBlend = parameter.blend
       parameter.currentValue = parameter.defaultValue
     }
+    applyDefaultExpressions()
   }
 
   function setExecutor(nextExecutor: Live2DExpressionExecutor | undefined) {
@@ -260,6 +287,7 @@ export function createLive2DExpressionsContext(
     activeLastFrame.clear()
     previewExpressionNames = []
     previewParameters = new Map()
+    defaultExpressionNames = []
     executor = undefined
     definitions.value = new Map()
     parameters.value = new Map()
@@ -275,6 +303,7 @@ export function createLive2DExpressionsContext(
     execute,
     resetExecution,
     setPreviewExpressions,
+    setDefaults,
     activate,
     reset,
     apply,
