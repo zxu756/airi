@@ -35,6 +35,7 @@ export default defineConfig({
     '**/drizzle/**',
     '**/.astro/**',
     'docs/superpowers/**',
+    'deploy/local/**', // Standalone local Docker stack, not part of the app build.
     '.agents/**',
     '.github/**',
     'CLAUDE.md', // Skip the symbolic link

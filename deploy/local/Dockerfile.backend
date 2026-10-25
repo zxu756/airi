@@ -1,0 +1,11 @@
+FROM node:24-trixie-slim
+
+WORKDIR /app
+
+COPY backend.mjs /app/backend.mjs
+
+ENV NODE_OPTIONS=--no-warnings
+ENV DATA_DIR=/data
+EXPOSE 8789
+
+CMD ["node", "backend.mjs"]

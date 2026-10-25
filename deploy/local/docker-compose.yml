@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      PORT: 8789
+      DATA_DIR: /data
+      OPENCODE_TARGET: https://opencode.ai/inference/go/v1
+    volumes:
+      - airi-data:/data
+    ports:
+      - "127.0.0.1:8789:8789"
+    cpus: 0.5
+    mem_limit: 256m
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - backend
+    cpus: 0.5
+    mem_limit: 128m
+    restart: unless-stopped
+
+volumes:
+  airi-data:
