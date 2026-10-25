@@ -196,7 +196,10 @@ export default defineConfig({
     ...(env.TARGET_HUGGINGFACE_SPACE
       ? []
       : [VitePWA({
-          registerType: 'prompt',
+          // Local Docker deployments rebuild often. Prompt mode leaves clients on
+          // a stale precache until someone clicks the update toast, so activate
+          // new service workers and claim clients automatically.
+          registerType: 'autoUpdate',
           includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
           manifest: {
             name: 'AIRI',
