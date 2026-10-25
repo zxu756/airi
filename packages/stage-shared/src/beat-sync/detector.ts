@@ -13,6 +13,7 @@ import { isStageCapacitor, isStageTamagotchi, isStageWeb, StageEnvironment } fro
 import { isElectronWindow } from '../window'
 import {
   beatSyncBeatSignaledInvokeEventa,
+  beatSyncBroadcastChannelName,
   beatSyncGetInputByteFrequencyDataInvokeEventa,
   beatSyncGetStateInvokeEventa,
   beatSyncStateChangedInvokeEventa,
@@ -22,6 +23,16 @@ import {
 } from './eventa'
 
 export const inputAnalyserFFTSize = 1024
+
+let webBeatChannel: BroadcastChannel | undefined
+
+function getWebBeatChannel() {
+  if (typeof BroadcastChannel === 'undefined')
+    return undefined
+
+  webBeatChannel ??= new BroadcastChannel(beatSyncBroadcastChannelName)
+  return webBeatChannel
+}
 
 export interface BeatSyncDetector {
   start: (createSource: (context: AudioContext) => Promise<AudioNode>) => Promise<void>
@@ -97,7 +108,14 @@ export function createBeatSyncDetector(options: CreateBeatSyncDetectorOptions): 
       context,
       worklet: analyserWorklet,
       listeners: {
-        onBeat: e => emit('beat', e),
+        onBeat: (e) => {
+          emit('beat', e)
+          // The web build runs the capture and the stage in separate tabs, so
+          // local listeners are not enough. Electron already broadcasts through
+          // the eventa BroadcastChannel.
+          if (options.env === StageEnvironment.Web)
+            getWebBeatChannel()?.postMessage(e)
+        },
       },
     })
 

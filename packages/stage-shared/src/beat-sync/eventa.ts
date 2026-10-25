@@ -18,6 +18,9 @@ export const beatSyncGetInputByteFrequencyDataInvokeEventa = defineInvokeEventa<
 export const beatSyncStateChangedInvokeEventa = defineInvokeEventa<void, BeatSyncDetectorState>('eventa:event:electron:beat-sync:state-changed')
 export const beatSyncBeatSignaledInvokeEventa = defineInvokeEventa<void, AnalyserBeatEvent>('eventa:event:electron:beat-sync:beat-signaled')
 
+/** Cross-tab beat channel used by the web build, where the settings page and the stage are separate tabs. */
+export const beatSyncBroadcastChannelName = 'airi::beat-sync:beats'
+
 let broadcastChannel: BroadcastChannel | undefined
 function getBroadcastChannel() {
   broadcastChannel ??= new BroadcastChannel('airi::beat-sync')

@@ -12,7 +12,7 @@ import type { Cubism4ModelSettings } from 'pixi-live2d-display/cubism4'
 import type { PixiLive2DInternalModel } from '../../../composables/live2d'
 import type { Live2DExpressionControl } from '../../../controls/manifest'
 
-import { listenBeatSyncBeatSignal } from '@proj-airi/stage-shared/beat-sync'
+import { beatSyncBroadcastChannelName, listenBeatSyncBeatSignal } from '@proj-airi/stage-shared/beat-sync'
 import { ambientLightDefaults, ambientLightNeutralEnvironment, ambientLightPerceptualLevel, wholeWindowRectangle } from '@proj-airi/stage-shared/screen-ambient-light'
 import { useTheme } from '@proj-airi/ui'
 import { until } from '@vueuse/core'
@@ -930,7 +930,18 @@ watch(focusAt, (value) => {
 
 onMounted(() => {
   const removeListener = listenBeatSyncBeatSignal(() => beatSync.scheduleBeat())
-  onUnmounted(() => removeListener())
+  // In the web build the capture page is a different tab from the stage.
+  const beatChannel = typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel(beatSyncBroadcastChannelName)
+    : undefined
+  const onBeatMessage = () => beatSync.scheduleBeat()
+  beatChannel?.addEventListener('message', onBeatMessage)
+
+  onUnmounted(() => {
+    removeListener()
+    beatChannel?.removeEventListener('message', onBeatMessage)
+    beatChannel?.close()
+  })
 })
 
 onMounted(async () => {
