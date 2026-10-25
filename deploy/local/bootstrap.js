@@ -1,3 +1,20 @@
+// AudioWorklet modules are cached by URL and a response cached with the wrong
+// MIME type survives service-worker updates. Append a version query so the
+// worklet is fetched from the network instead of the stale cache entry.
+try {
+  if (typeof AudioWorklet !== 'undefined' && AudioWorklet.prototype?.addModule) {
+    const originalAddModule = AudioWorklet.prototype.addModule
+    AudioWorklet.prototype.addModule = function (url, options) {
+      if (typeof url === 'string' && /\.mjs($|\?)/.test(url) && !url.includes('airi-worklet='))
+        url += `${url.includes('?') ? '&' : '?'}airi-worklet=2`
+      return originalAddModule.call(this, url, options)
+    }
+  }
+}
+catch (error) {
+  console.warn('[airi-bootstrap] worklet MIME workaround failed', error)
+}
+
 const ALLOW = [
   /^settings\//,
   /^airi-cards$/,
