@@ -15,6 +15,19 @@ services:
     mem_limit: 256m
     restart: unless-stopped
 
+  tts:
+    build:
+      context: ./tts
+      dockerfile: Dockerfile
+    environment:
+      PORT: 8790
+      EDGE_TTS_VOICE: zh-CN-XiaoxiaoNeural
+    ports:
+      - "127.0.0.1:8790:8790"
+    cpus: 0.25
+    mem_limit: 192m
+    restart: unless-stopped
+
   web:
     build:
       context: .

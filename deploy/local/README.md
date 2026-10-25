@@ -1,13 +1,14 @@
 # AIRI 本地 Docker 栈
 
-最小可用的 AIRI 本地后端 + 前端，全部跑在 Docker 里。
+最小可用的 AIRI 本地后端、TTS 和可选前端。桌面版使用 `backend` + `tts`；`web` 只在浏览器版需要。
 
 ## 组成
 
 | 服务 | 镜像 | 作用 | 端口 |
 |---|---|---|---|
 | `backend` | `node:24-trixie-slim` | SQLite 状态库、模型文件、OpenCode `/v1` 代理 | `127.0.0.1:8789` |
-| `web` | `nginx:stable-alpine` | AIRI 静态站点 + 反向代理 `/api`、`/v1` | `5173` |
+| `tts` | `python:3.12-slim` + `edge-tts` | 中文 TTS 桥，OpenAI `/v1/audio/speech` 兼容 | `127.0.0.1:8790` |
+| `web` | `nginx:stable-alpine` | AIRI 静态站点 + 反向代理 `/api`、`/v1`（可选） | `5173` |
 
 数据存在 Docker volume `airi-data`：
 
@@ -20,17 +21,36 @@
 
 ## 使用
 
-首次或改了前端代码后，先在宿主机构建前端（避免在 2GB 的 Docker VM 里跑 pnpm 构建）：
+### 桌面版（当前主要用法）
+
+```sh
+docker compose -f deploy/local/docker-compose.yml up -d backend tts
+```
+
+桌面版 Provider 使用：
+
+```text
+http://127.0.0.1:8789/v1
+```
+
+TTS Provider（`openai-compatible-audio-speech`）使用：
+
+```text
+Base URL: http://127.0.0.1:8790/v1/
+Model:    tts-1
+Voice:    zh-CN-XiaoxiaoNeural
+```
+
+`tts` 使用 Microsoft Edge TTS 的免费在线声线，不需要 key；Docker 容器本身不下载模型。
+
+### Web 版（可选）
+
+首次或改了前端代码后，先在宿主机构建前端，再启动 `web`：
 
 ```sh
 cd /Users/xu/Projects/airi
 ./deploy/local/build-web.sh
-```
-
-启动：
-
-```sh
-docker compose -f deploy/local/docker-compose.yml up -d --build
+docker compose -f deploy/local/docker-compose.yml up -d --build backend web
 ```
 
 访问：
@@ -71,7 +91,7 @@ http://localhost:5173/
 Colima 虚拟机：
 
 ```sh
-colima start --cpu 2 --memory 2 --disk 60
+colima start --cpu 1 --memory 1 --disk 10
 ```
 
 容器（见 `docker-compose.yml`）：
@@ -79,7 +99,8 @@ colima start --cpu 2 --memory 2 --disk 60
 | 服务 | CPU | 内存 |
 |---|---|---|
 | `backend` | 0.5 | 256 MB |
-| `web` | 0.5 | 128 MB |
+| `tts` | 0.25 | 192 MB |
+| `web` | 0.5 | 128 MB（可选） |
 
 ## 常用命令
 
