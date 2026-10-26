@@ -48,6 +48,11 @@ class UrlPolicyTest(unittest.TestCase):
         with self.assertRaises(UrlBlocked):
             validate_url("http://8.8.8.8:22/")
 
+    def test_blocks_multicast_addresses(self):
+        for url in ["http://224.0.0.1/", "http://[ff02::1]/"]:
+            with self.assertRaises(UrlBlocked):
+                validate_url(url)
+
     def test_allows_public_addresses(self):
         self.assertEqual(validate_url("https://8.8.8.8/x"), "https://8.8.8.8/x")
         self.assertEqual(validate_url("http://8.8.8.8:8080/"), "http://8.8.8.8:8080/")
@@ -112,6 +117,23 @@ class Handler(BaseHTTPRequestHandler):
             body = b"slow"
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
+        elif self.path == "/gbk":
+            body = "<html><head><meta charset=\"gbk\"><title>北京天气</title></head><body><p>今天晴</p></body></html>".encode("gbk")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+        elif self.path == "/drip":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", "20")
+            self.end_headers()
+            for _ in range(20):
+                try:
+                    self.wfile.write(b"x")
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+                time.sleep(0.2)
+            return
         else:
             self.send_response(404)
             body = b"missing"
@@ -138,6 +160,7 @@ class FetchTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
 
     def allow_local(self, url):
         if url.startswith(f"http://127.0.0.1:{self.port}/"):
@@ -171,3 +194,16 @@ class FetchTest(unittest.TestCase):
         with mock.patch("fetch.validate_url", self.allow_local):
             with self.assertRaises(httpx.TimeoutException):
                 fetch_page(f"http://127.0.0.1:{self.port}/slow", timeout=0.2)
+
+    def test_decodes_gbk_meta_charset(self):
+        with mock.patch("fetch.validate_url", self.allow_local):
+            page = fetch_page(f"http://127.0.0.1:{self.port}/gbk")
+        self.assertIn("北京天气", page.html)
+        self.assertNotIn("\ufffd", page.html)
+
+    def test_times_out_slow_drip(self):
+        started = time.monotonic()
+        with mock.patch("fetch.validate_url", self.allow_local):
+            with self.assertRaises(httpx.TimeoutException):
+                fetch_page(f"http://127.0.0.1:{self.port}/drip", timeout=0.5)
+        self.assertLess(time.monotonic() - started, 2.0)

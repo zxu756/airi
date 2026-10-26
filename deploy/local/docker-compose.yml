@@ -35,9 +35,11 @@ services:
       SEARXNG_BASE_URL: http://127.0.0.1:8792/
       SEARXNG_SECRET: local-browse-searxng-secret-0123456789abcdef
     volumes:
-      - ./searxng:/etc/searxng
+      - ./searxng:/etc/searxng:ro
     ports:
       - "127.0.0.1:8792:8080"
+    networks:
+      - browse-net
     cpus: 0.5
     mem_limit: 256m
     restart: unless-stopped
@@ -55,9 +57,12 @@ services:
       PORT: 8791
       SEARXNG_URL: http://searxng:8080
     depends_on:
-      - searxng
+      searxng:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8791:8791"
+    networks:
+      - browse-net
     cpus: 0.25
     mem_limit: 256m
     restart: unless-stopped
@@ -81,3 +86,7 @@ services:
 
 volumes:
   airi-data:
+
+networks:
+  browse-net:
+    driver: bridge

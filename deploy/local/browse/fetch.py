@@ -1,12 +1,14 @@
 import ipaddress
 import re
 import socket
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit
 
 import httpx
 import trafilatura
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, UnicodeDammit
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -14,6 +16,7 @@ USER_AGENT = (
 )
 ALLOWED_CONTENT_TYPES = {"text/html", "application/xhtml+xml", "text/plain"}
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+_DNS_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="browse-dns")
 
 
 class UrlBlocked(ValueError):
@@ -86,9 +89,21 @@ def extract_page(html: str, url: str) -> ExtractedPage:
 
 def is_public_ip(value: str) -> bool:
     try:
-        return ipaddress.ip_address(value).is_global
+        address = ipaddress.ip_address(value)
     except ValueError:
         return False
+    return address.is_global and not address.is_multicast
+
+
+def _decode_body(body: bytes, content_type_header: str) -> str:
+    match = re.search(r"charset=([\w-]+)", content_type_header, re.I)
+    if match:
+        try:
+            return body.decode(match.group(1), errors="replace")
+        except LookupError:
+            pass
+    detector = UnicodeDammit(body, is_html=True)
+    return detector.unicode_markup or body.decode("utf-8", errors="replace")
 
 
 def validate_url(url: str) -> str:
@@ -111,7 +126,15 @@ def validate_url(url: str) -> str:
         raise UrlBlocked("URL port is not allowed")
 
     try:
-        addresses = socket.getaddrinfo(parts.hostname, port, type=socket.SOCK_STREAM)
+        future = _DNS_POOL.submit(
+            socket.getaddrinfo,
+            parts.hostname,
+            port,
+            type=socket.SOCK_STREAM,
+        )
+        addresses = future.result(timeout=2.0)
+    except FutureTimeout as error:
+        raise UrlBlocked("URL host lookup timed out") from error
     except socket.gaierror as error:
         raise UrlBlocked(f"URL host cannot be resolved: {parts.hostname}") from error
 
@@ -136,10 +159,22 @@ def fetch_page(
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     }
     current = url
-    with httpx.Client(timeout=httpx.Timeout(timeout), follow_redirects=False) as client:
+    deadline = time.monotonic() + timeout
+    with httpx.Client(follow_redirects=False, trust_env=False) as client:
         for _ in range(max_redirects + 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise httpx.TimeoutException("total deadline")
             validate_url(current)
-            with client.stream("GET", current, headers=headers) as response:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise httpx.TimeoutException("total deadline")
+            with client.stream(
+                "GET",
+                current,
+                headers=headers,
+                timeout=remaining,
+            ) as response:
                 if response.status_code in REDIRECT_STATUSES:
                     location = response.headers.get("location")
                     if not location:
@@ -147,8 +182,9 @@ def fetch_page(
                     current = urljoin(current, location)
                     continue
 
+                content_type_header = response.headers.get("content-type", "")
                 content_type = (
-                    response.headers.get("content-type", "")
+                    content_type_header
                     .split(";")[0]
                     .strip()
                     .lower()
@@ -162,6 +198,8 @@ def fetch_page(
                 total = 0
                 truncated = False
                 for chunk in response.iter_bytes():
+                    if time.monotonic() > deadline:
+                        raise httpx.TimeoutException("total deadline")
                     if not chunk:
                         continue
                     remaining = max_bytes - total
@@ -177,12 +215,11 @@ def fetch_page(
                     total += len(chunk)
 
                 body = b"".join(chunks)
-                encoding = response.encoding or "utf-8"
                 return FetchedPage(
                     status=response.status_code,
                     final_url=str(response.url),
                     content_type=content_type,
-                    html=body.decode(encoding, errors="replace"),
+                    html=_decode_body(body, content_type_header),
                     truncated=truncated,
                 )
 
