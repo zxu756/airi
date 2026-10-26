@@ -1,10 +1,66 @@
 import ipaddress
+import re
 import socket
+from dataclasses import dataclass
 from urllib.parse import urlsplit
+
+import trafilatura
+from bs4 import BeautifulSoup
 
 
 class UrlBlocked(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class ExtractedPage:
+    title: str
+    text: str
+    fallback: bool
+
+
+def _title_from_html(html: str, url: str) -> str:
+    soup = BeautifulSoup(html, "lxml")
+    if soup.title:
+        title = soup.title.get_text(" ", strip=True)
+        if title:
+            return title
+    try:
+        metadata = trafilatura.extract_metadata(html, default_url=url)
+        if metadata and metadata.title:
+            title = metadata.title.strip()
+            if title:
+                return title
+    except Exception:
+        pass
+    return urlsplit(url).hostname or ""
+
+
+def extract_page(html: str, url: str) -> ExtractedPage:
+    try:
+        text = trafilatura.extract(
+            html,
+            url=url,
+            include_tables=True,
+            include_comments=False,
+            favor_recall=True,
+        )
+    except Exception:
+        text = None
+
+    if text:
+        text = text.strip()
+    fallback = not text
+    if fallback:
+        soup = BeautifulSoup(html, "lxml")
+        text = soup.get_text("\n", strip=True)
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    return ExtractedPage(
+        title=_title_from_html(html, url),
+        text=text or "",
+        fallback=fallback,
+    )
 
 
 def is_public_ip(value: str) -> bool:
