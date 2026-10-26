@@ -69,7 +69,9 @@ http://127.0.0.1:8791/mcp
 }
 ```
 
-限制：单次搜索 6 秒、单页抓取 6 秒、响应最多 2 MiB，超出会截断；只抓公网 http(s)，本机、局域网和云元数据地址会被拦截。
+限制：单次搜索 6 秒、单页抓取 6 秒（总时限）、响应最多 2 MiB，超出会截断；只抓公网 http(s)，本机、局域网和云元数据地址会被拦截。
+
+`searxng` 和 `browse` 只连独立 Docker 网络，不能访问 `backend` 的 `/api/state`。`8792` 的 `SEARXNG_SECRET` 是本地占位值，不要把这个端口暴露到公网。
 
 验证记录（2026-10-26）：
 
@@ -78,6 +80,10 @@ http://127.0.0.1:8791/mcp
 - 聊天里问“搜一下 AIRI 最近的进展，给我三条来源”，模型会先列 MCP 工具，再调用 `browse::web_search` / `browse::web_fetch`，回复带三条来源链接。
 - 抓取 `http://127.0.0.1:8789/api/state` 会被拦截，回复只说明地址不是公网，不读取本机服务。
 - TTS 正常朗读回复。
+
+MCP 工具提示需要 AIRI 桌面版包含对应改动；从 fork 重新构建并安装后生效（当前 `/Applications/AIRI.app` 已包含）。
+
+回滚：从 `mcp.json` 删除 `browse`，然后 `docker compose -f deploy/local/docker-compose.yml stop browse searxng`。App 代码改动需要重新构建才能回退。
 
 ### Web 版（可选）
 
