@@ -1,6 +1,6 @@
 # AIRI 本地 Docker 栈
 
-最小可用的 AIRI 本地后端、TTS 和可选前端。桌面版使用 `backend` + `tts`；`web` 只在浏览器版需要。
+最小可用的 AIRI 本地后端、TTS、网页检索和可选前端。桌面版使用 `backend` + `tts` + `browse`；`web` 只在浏览器版需要。
 
 ## 组成
 
@@ -8,6 +8,7 @@
 |---|---|---|---|
 | `backend` | `node:24-trixie-slim` | SQLite 状态库、模型文件、OpenCode `/v1` 代理 | `127.0.0.1:8789` |
 | `tts` | `python:3.12-slim` + `edge-tts` | 中文 TTS 桥，OpenAI `/v1/audio/speech` 兼容 | `127.0.0.1:8790` |
+| `browse` | `python:3.12-slim` + `mcp` | 网页搜索与正文提取，MCP Streamable HTTP | `127.0.0.1:8791` |
 | `web` | `nginx:stable-alpine` | AIRI 静态站点 + 反向代理 `/api`、`/v1`（可选） | `5173` |
 
 数据存在 Docker volume `airi-data`：
@@ -24,7 +25,7 @@
 ### 桌面版（当前主要用法）
 
 ```sh
-docker compose -f deploy/local/docker-compose.yml up -d backend tts
+docker compose -f deploy/local/docker-compose.yml up -d backend tts browse
 ```
 
 桌面版 Provider 使用：
@@ -42,6 +43,30 @@ Voice:    zh-CN-XiaoxiaoNeural
 ```
 
 `tts` 使用 Microsoft Edge TTS 的免费在线声线，不需要 key；Docker 容器本身不下载模型。
+
+### Browse MCP（网页搜索与正文读取）
+
+`browse` 是一个本地 MCP 服务，提供 `web_search` 和 `web_fetch`。搜索用 Brave 网页版，Bing RSS 兜底；抓取用 trafilatura 提取正文。不需要搜索 API key。
+
+MCP 地址：
+
+```text
+http://127.0.0.1:8791/mcp
+```
+
+在 AIRI 的 `~/Library/Application Support/ai.moeru.airi/mcp.json` 里加：
+
+```json
+{
+  "mcpServers": {
+    "browse": {
+      "url": "http://127.0.0.1:8791/mcp"
+    }
+  }
+}
+```
+
+限制：单次搜索 6 秒、单页抓取 6 秒、响应最多 2 MiB，超出会截断；只抓公网 http(s)，本机、局域网和云元数据地址会被拦截。
 
 ### Web 版（可选）
 
@@ -100,6 +125,7 @@ colima start --cpu 1 --memory 1 --disk 10
 |---|---|---|
 | `backend` | 0.5 | 256 MB |
 | `tts` | 0.25 | 192 MB |
+| `browse` | 0.25 | 256 MB |
 | `web` | 0.5 | 128 MB（可选） |
 
 ## 常用命令

@@ -1,11 +1,14 @@
-import base64
+import re
 import threading
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from urllib.parse import parse_qs, urlencode, urlsplit
+from html import unescape
+from urllib.parse import urlencode
 
 import httpx
 from bs4 import BeautifulSoup
+from primp import Client as PrimpClient
 
 from fetch import USER_AGENT
 
@@ -66,6 +69,12 @@ _LAST_BRAVE = 0.0
 _CACHE = TTLCache(300)
 
 
+def _plain_text(value: str) -> str:
+    value = unescape(value)
+    value = re.sub(r"<[^>]+>", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
 def parse_brave(html: str) -> list[SearchHit]:
     soup = BeautifulSoup(html, "lxml")
     hits: list[SearchHit] = []
@@ -94,42 +103,26 @@ def parse_brave(html: str) -> list[SearchHit]:
     return hits
 
 
-def decode_bing_url(href: str) -> str:
-    parts = urlsplit(href)
-    if "bing.com" not in parts.netloc or not parts.path.startswith("/ck/a"):
-        return href
-    values = parse_qs(parts.query).get("u")
-    if not values:
-        return href
-    value = values[0]
-    if not value.startswith("a1"):
-        return href
-    raw = value[2:]
-    padding = "=" * (-len(raw) % 4)
+def parse_bing_rss(xml: str) -> list[SearchHit]:
     try:
-        return base64.urlsafe_b64decode(raw + padding).decode("utf-8")
-    except Exception:
-        return href
+        root = ET.fromstring(xml)
+    except ET.ParseError as error:
+        raise SearchError(f"bing rss parse failed: {error}") from error
 
-
-def parse_bing(html: str) -> list[SearchHit]:
-    soup = BeautifulSoup(html, "lxml")
     hits: list[SearchHit] = []
     seen: set[str] = set()
-    for block in soup.select("li.b_algo"):
-        anchor = block.select_one("h2 a")
-        if not anchor:
-            continue
-        url = decode_bing_url(anchor.get("href", ""))
+    for item in root.findall("./channel/item"):
+        url = (item.findtext("link") or "").strip()
         if not url.startswith(("http://", "https://")) or url in seen:
             continue
         seen.add(url)
-        title = anchor.get_text(" ", strip=True)
-        snippet_element = block.select_one(".b_caption p") or block.select_one("p")
-        snippet = (
-            snippet_element.get_text(" ", strip=True) if snippet_element else ""
+        hits.append(
+            SearchHit(
+                title=_plain_text(item.findtext("title") or ""),
+                url=url,
+                snippet=_plain_text(item.findtext("description") or ""),
+            )
         )
-        hits.append(SearchHit(title=title, url=url, snippet=snippet))
     return hits
 
 
@@ -142,7 +135,7 @@ def _brave_url(query: str, time_range: str | None) -> str:
 
 
 def _bing_url(query: str, time_range: str | None) -> str:
-    params = {"q": query}
+    params = {"format": "rss", "setlang": "en", "q": query}
     value = _BING_FILTER.get(time_range or "")
     if value:
         params["filters"] = f'ex1:"{value}"'
@@ -153,7 +146,7 @@ def _fetch_brave(url: str) -> str:
     response = httpx.get(
         url,
         headers=SEARCH_HEADERS,
-        timeout=6.0,
+        timeout=3.5,
         follow_redirects=True,
     )
     if response.status_code != 200:
@@ -162,12 +155,8 @@ def _fetch_brave(url: str) -> str:
 
 
 def _fetch_bing(url: str) -> str:
-    response = httpx.get(
-        url,
-        headers=SEARCH_HEADERS,
-        timeout=6.0,
-        follow_redirects=True,
-    )
+    with PrimpClient(impersonate="chrome", timeout=5) as client:
+        response = client.get(url)
     if response.status_code != 200:
         raise SearchError(f"bing returned {response.status_code}")
     return response.text
@@ -209,7 +198,7 @@ def search_web(
         errors.append(f"brave {error}")
 
     try:
-        hits = parse_bing(_fetch_bing(_bing_url(query, time_range)))[:count]
+        hits = parse_bing_rss(_fetch_bing(_bing_url(query, time_range)))[:count]
         if hits:
             result = SearchResult(query=query, engine="bing", hits=hits)
             _CACHE.set(key, result)

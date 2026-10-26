@@ -5,8 +5,7 @@ import search
 from search import (
     SearchError,
     TTLCache,
-    decode_bing_url,
-    parse_bing,
+    parse_bing_rss,
     parse_brave,
     search_web,
 )
@@ -27,11 +26,18 @@ BRAVE_ZH = """
 </div>
 """
 
-BING = """
-<li class="b_algo">
-  <h2><a href="https://www.bing.com/ck/a?!&amp;&amp;p=abc&amp;u=a1aHR0cHM6Ly9leGFtcGxlLmNvbS9wYWdl&amp;ntb=1">Example page</a></h2>
-  <div class="b_caption"><p>An example snippet.</p></div>
-</li>
+BING_RSS = """<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Example page</title>
+    <link>https://example.com/page</link>
+    <description>An example &amp; snippet.</description>
+  </item>
+</channel></rss>
+"""
+
+EMPTY_RSS = """<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel></channel></rss>
 """
 
 
@@ -48,19 +54,16 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(hits[0].title, "北京天气")
         self.assertIn("今天晴", hits[0].snippet)
 
-    def test_decodes_bing_redirect(self):
-        href = "https://www.bing.com/ck/a?!&&p=abc&u=a1aHR0cHM6Ly9leGFtcGxlLmNvbS9wYWdl&ntb=1"
-        self.assertEqual(decode_bing_url(href), "https://example.com/page")
-
-    def test_parses_bing_result_to_real_url(self):
-        hits = parse_bing(BING)
-        self.assertEqual(len(hits), 1)
-        self.assertEqual(hits[0].url, "https://example.com/page")
-        self.assertEqual(hits[0].title, "Example page")
-
     def test_ignores_brave_internal_links(self):
         html = '<div class="snippet"><a href="https://search.brave.com/x"><div class="title search-snippet-title">bad</div></a></div>'
         self.assertEqual(parse_brave(html), [])
+
+    def test_parses_bing_rss(self):
+        hits = parse_bing_rss(BING_RSS)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].title, "Example page")
+        self.assertEqual(hits[0].url, "https://example.com/page")
+        self.assertEqual(hits[0].snippet, "An example & snippet.")
 
 
 def clear_cache():
@@ -83,7 +86,7 @@ class SearchTest(unittest.TestCase):
 
     def test_falls_back_to_bing(self):
         with mock.patch("search._fetch_brave", return_value="<html></html>"), \
-             mock.patch("search._fetch_bing", return_value=BING):
+             mock.patch("search._fetch_bing", return_value=BING_RSS):
             result = search_web("airi")
         self.assertEqual(result.engine, "bing")
         self.assertEqual(result.hits[0].url, "https://example.com/page")
@@ -98,7 +101,7 @@ class SearchTest(unittest.TestCase):
 
     def test_returns_empty_result_when_both_engines_have_no_hits(self):
         with mock.patch("search._fetch_brave", return_value="<html></html>"), \
-             mock.patch("search._fetch_bing", return_value="<html></html>"):
+             mock.patch("search._fetch_bing", return_value=EMPTY_RSS):
             result = search_web("nothing")
         self.assertEqual(result.engine, "none")
         self.assertEqual(result.hits, [])
@@ -122,3 +125,9 @@ class SearchTest(unittest.TestCase):
         with mock.patch("search._fetch_brave", return_value=BRAVE) as brave:
             search_web("airi", time_range="week")
         self.assertIn("tf=pw", brave.call_args.args[0])
+
+    def test_time_range_maps_to_bing_filter(self):
+        with mock.patch("search._fetch_brave", return_value="<html></html>"), \
+             mock.patch("search._fetch_bing", return_value=BING_RSS) as bing:
+            search_web("airi", time_range="week")
+        self.assertIn("filters=ex1%3A%22ez2%22", bing.call_args.args[0])

@@ -28,6 +28,23 @@ services:
     mem_limit: 192m
     restart: unless-stopped
 
+  browse:
+    build:
+      context: ./browse
+      dockerfile: Dockerfile
+    environment:
+      PORT: 8791
+    ports:
+      - "127.0.0.1:8791:8791"
+    cpus: 0.25
+    mem_limit: 256m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 8791), 2); s.close()"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
   web:
     build:
       context: .
