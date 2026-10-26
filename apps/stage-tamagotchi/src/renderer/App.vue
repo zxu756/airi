@@ -134,10 +134,7 @@ async function refreshPluginRuntimeTools() {
 
 // Every renderer creates the runtime tool stores for synchronized state. Only
 // the main Stage renderer discovers tools and keeps executors.
-const stopLeadershipListener = syncedPinia.onLeadershipChange((isLeader) => {
-  if (!isLeader)
-    return
-
+function refreshRuntimeTools() {
   void builtinToolsStore.refresh().catch((error) => {
     console.warn('[App] Failed to refresh built-in runtime tools:', error)
   })
@@ -148,7 +145,19 @@ const stopLeadershipListener = syncedPinia.onLeadershipChange((isLeader) => {
     console.warn('[App] Failed to refresh Home Assistant tools:', error)
   })
   void refreshPluginRuntimeTools()
+}
+
+const stopLeadershipListener = syncedPinia.onLeadershipChange((isLeader) => {
+  if (!isLeader)
+    return
+
+  refreshRuntimeTools()
 })
+
+// A window can load as the leader, and no leadership change follows. Register
+// the runtime tools once here so the first chat turn sees them.
+if (syncedPinia.isLeader())
+  refreshRuntimeTools()
 
 function createFullStageRuntime() {
   const contextBridgeStore = useContextBridgeStore()
@@ -313,8 +322,6 @@ function createFullStageRuntime() {
       inferencePreload.triggerPreload()
     },
     dispose() {
-      stopAuthenticatedSetup?.()
-      stopLoggedOutSetup?.()
       characterOrchestratorStore.dispose()
       contextBridgeStore.dispose()
     },
