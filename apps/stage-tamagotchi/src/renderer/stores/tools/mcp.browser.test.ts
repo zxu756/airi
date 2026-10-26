@@ -65,7 +65,7 @@ describe('tamagotchiMcpToolsStore', () => {
       'mcp:builtIn_mcpCallTool',
     ]))
     expect(prompts.activeToolsetPrompt).toContain('builtIn_mcpListTools')
-    expect(prompts.activeToolsetPrompt).toContain('browse::web_search')
+    expect(prompts.activeToolsetPrompt).toContain('web search')
 
     mcpTools.dispose()
     await vi.waitFor(() => expect(llmTools.tools.map(tool => tool.id)).toEqual([]))

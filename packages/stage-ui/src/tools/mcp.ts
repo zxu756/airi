@@ -111,7 +111,7 @@ export function createMcpTools(runtime: McpToolRuntime): Array<Promise<Tool>> {
     }),
     tool({
       name: MCP_CALL_TOOL_NAME,
-      description: 'Call an MCP tool by name. Use builtIn_mcpListTools first. For the browse server, browse::web_search searches the web and browse::web_fetch reads a page.',
+      description: 'Call an MCP tool by name. Use builtIn_mcpListTools first. MCP servers can provide web search, page reading, and other external capabilities.',
       execute: async ({ name, arguments: argsJson }) => {
         try {
           const args = argsJson ? JSON.parse(argsJson) : {}
