@@ -1,0 +1,12 @@
+use_default_settings: true
+
+server:
+  secret_key: "local-dev-only-change-me-0123456789abcdef"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json

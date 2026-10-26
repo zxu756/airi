@@ -25,7 +25,7 @@ async def main() -> None:
             search_seconds = time.monotonic() - started
             search_text = search.content[0].text
             print(search_text[:800])
-            assert "Engine: brave" in search_text or "Engine: bing" in search_text, search_text[:200]
+            assert "Engine: searxng" in search_text, search_text[:200]
             assert "github.com/moeru-ai/airi" in search_text, search_text[:500]
             assert search_seconds < 8, search_seconds
 

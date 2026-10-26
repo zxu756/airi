@@ -1,6 +1,6 @@
 # AIRI 本地 Docker 栈
 
-最小可用的 AIRI 本地后端、TTS、网页检索和可选前端。桌面版使用 `backend` + `tts` + `browse`；`web` 只在浏览器版需要。
+最小可用的 AIRI 本地后端、TTS、网页检索和可选前端。桌面版使用 `backend` + `tts` + `browse`（`browse` 依赖 `searxng`）；`web` 只在浏览器版需要。
 
 ## 组成
 
@@ -9,6 +9,7 @@
 | `backend` | `node:24-trixie-slim` | SQLite 状态库、模型文件、OpenCode `/v1` 代理 | `127.0.0.1:8789` |
 | `tts` | `python:3.12-slim` + `edge-tts` | 中文 TTS 桥，OpenAI `/v1/audio/speech` 兼容 | `127.0.0.1:8790` |
 | `browse` | `python:3.12-slim` + `mcp` | 网页搜索与正文提取，MCP Streamable HTTP | `127.0.0.1:8791` |
+| `searxng` | `searxng/searxng` | 本地搜索聚合，Brave / Google 等引擎 | `127.0.0.1:8792` |
 | `web` | `nginx:stable-alpine` | AIRI 静态站点 + 反向代理 `/api`、`/v1`（可选） | `5173` |
 
 数据存在 Docker volume `airi-data`：
@@ -46,7 +47,9 @@ Voice:    zh-CN-XiaoxiaoNeural
 
 ### Browse MCP（网页搜索与正文读取）
 
-`browse` 是一个本地 MCP 服务，提供 `web_search` 和 `web_fetch`。搜索用 Brave 网页版，Bing RSS 兜底；抓取用 trafilatura 提取正文。不需要搜索 API key。
+`browse` 是一个本地 MCP 服务，提供 `web_search` 和 `web_fetch`。搜索走本地 SearXNG，SearXNG 聚合 Brave、Google 等引擎；抓取用 trafilatura 提取正文。不需要搜索 API key。
+
+`searxng` 是搜索聚合服务，`browse` 通过 Docker 内网 `http://searxng:8080` 访问它；`8792` 只用于本机调试。
 
 MCP 地址：
 
@@ -71,6 +74,7 @@ http://127.0.0.1:8791/mcp
 验证记录（2026-10-26）：
 
 - AIRI 的 MCP 页测试连接返回 2 个工具：`web_search`、`web_fetch`，耗时 27ms。
+- 搜索由 SearXNG 聚合返回，英文和中文查询都能拿到结果，耗时约 0.6-1.6 秒。
 - 聊天里问“搜一下 AIRI 最近的进展，给我三条来源”，模型会先列 MCP 工具，再调用 `browse::web_search` / `browse::web_fetch`，回复带三条来源链接。
 - 抓取 `http://127.0.0.1:8789/api/state` 会被拦截，回复只说明地址不是公网，不读取本机服务。
 - TTS 正常朗读回复。
@@ -133,6 +137,7 @@ colima start --cpu 1 --memory 1 --disk 10
 | `backend` | 0.5 | 256 MB |
 | `tts` | 0.25 | 192 MB |
 | `browse` | 0.25 | 256 MB |
+| `searxng` | 0.5 | 256 MB |
 | `web` | 0.5 | 128 MB（可选） |
 
 ## 常用命令
